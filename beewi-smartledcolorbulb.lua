@@ -10,12 +10,12 @@ return {
     },
     {
       id = 'white',
-      name = 'White',
+      name = 'Color temperature',
       datatype = dt.scale
     },
     {
       id = 'color',
-      name = 'Color',
+      name = 'RGB color',
       datatype = dt.rgb
     },
     {
@@ -24,6 +24,33 @@ return {
       datatype = dt.scale
     },
   },
+  read = function(device)
+    local sock
+    values = {}
+
+    sock = ble.sock()
+    ble.settimeout(sock, 30)
+    res = ble.connect(sock, device.mac)
+
+    if res then
+      value_0x24 = ble.sockreadhnd(sock, 0x24) or ''
+      if (#value_0x24 == 5) then   
+        status = true
+        if (value_0x24:byte(1) == 0) then
+          values.power = false
+        elseif (value_0x24:byte(1) == 1) then
+          values.power = true
+        end
+        values.white = (bit.band(value_0x24:byte(2), 15)-1)*10
+        values.brightness = ((bit.rshift(bit.band(value_0x24:byte(2), 240), 4)-1)*10)
+        values.color = bit.lshift(bit.band(value_0x24:byte(3),0xFF),16) + bit.lshift(bit.band(value_0x24:byte(4),0xFF),8) + bit.band(value_0x24:byte(5),0xFF)
+      end
+    end
+
+    ble.close(sock)
+   
+    return status, values
+  end,
   write = function(device, object, value)
     local sock
     sock = ble.sock()
@@ -53,37 +80,13 @@ return {
     if (object.id == 'white') then
       if res then
         ble.sockwritecmd(sock, 0x21, 0x55, 0x14, 0xFF, 0xFF, 0xFF, 0x0D, 0x0A)
-        if (value >= 0 and value < 10) then bite = 0x02
-        elseif (value >= 10 and value < 20) then bite = 0x03 
-        elseif (value >= 20 and value < 30) then bite = 0x04
-        elseif (value >= 30 and value < 40) then bite = 0x05
-        elseif (value >= 40 and value < 50) then bite = 0x06
-        elseif (value >= 50 and value < 60) then bite = 0x07
-        elseif (value >= 60 and value < 70) then bite = 0x08
-        elseif (value >= 70 and value < 80) then bite = 0x09
-        elseif (value >= 80 and value < 90) then bite = 0x0A 
-        elseif (value >= 90 and value <= 100) then bite = 0x0B
-        end
-        log(bite)
-        ble.sockwritecmd(sock, 0x21, 0x55, 0x11, bite, 0x0D, 0x0A)
+        ble.sockwritecmd(sock, 0x21, 0x55, 0x11, (value/10)+1, 0x0D, 0x0A)
       end
     end
 
     if (object.id == 'brightness') then
       if res then
-        if (value >= 0 and value < 10) then bite = 0x02
-        elseif (value >= 10 and value < 20) then bite = 0x03 
-        elseif (value >= 20 and value < 30) then bite = 0x04
-        elseif (value >= 30 and value < 40) then bite = 0x05
-        elseif (value >= 40 and value < 50) then bite = 0x06
-        elseif (value >= 50 and value < 60) then bite = 0x07
-        elseif (value >= 60 and value < 70) then bite = 0x08
-        elseif (value >= 70 and value < 80) then bite = 0x09
-        elseif (value >= 80 and value < 90) then bite = 0x0A 
-        elseif (value >= 90 and value <= 100) then bite = 0x0B
-        end
-        log(bite)
-        ble.sockwritecmd(sock, 0x21, 0x55, 0x12, bite, 0x0D, 0x0A)
+        ble.sockwritecmd(sock, 0x21, 0x55, 0x12, (value/10)+1, 0x0D, 0x0A)
       end
     end
 
