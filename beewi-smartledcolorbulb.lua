@@ -1,8 +1,8 @@
-require("apps")
 return { 
   manufacturer = 'BeeWi',
   description = 'Smart LED Color Bulb',
   default_name = 'BeeWi Bulb',
+  version = 1,  
   objects = { 
     {
       id = 'power',
@@ -19,13 +19,13 @@ return {
     {
       id = 'white',
       name = 'Color temperature',
-      datatype = dt.uint8,
+      datatype = dt.scale,
     write_only = true
     },
     {
       id = 'white_status',
       name = 'Color temperature status',
-      datatype = dt.uint8,
+      datatype = dt.scale,
     read_only = true
     },
     {
@@ -43,21 +43,20 @@ return {
     {
       id = 'brightness',
       name = 'Brightness',
-      datatype = dt.uint8,
+      datatype = dt.scale,
     write_only = true
     },
     {
       id = 'brightness_status',
       name = 'Brightness Status',
-      datatype = dt.uint8,
+      datatype = dt.scale,
     read_only = true
     }
   },
   
   read = function(device)
     local values = {}
-
-    local res, sock, err  = device.profile._connect(device.mac)
+    local res, sock, err  = device.profile._connect(device)
 
     local status
     if res and sock then
@@ -69,22 +68,22 @@ return {
       elseif (value_0x24:byte(1) == 1) then
         values.power_status = true
       end
-      values.white_status = (bit.band(value_0x24:byte(2), 15)-1)
-      values.brightness_status = ((bit.rshift(bit.band(value_0x24:byte(2), 240), 4)-1))
+      values.white_status = (bit.band(value_0x24:byte(2), 15)-1) * 10 
+      values.brightness_status = ((bit.rshift(bit.band(value_0x24:byte(2), 240), 4)-1)) * 10 
       values.color_status = bit.lshift(bit.band(value_0x24:byte(3),0xFF),16) + bit.lshift(bit.band(value_0x24:byte(4),0xFF),8) + bit.band(value_0x24:byte(5),0xFF)
       end
     end
 
     if not status then 
-      device.profile._disconnect(device.mac) 
+      device.profile._disconnect(device) 
     end 
 
     return status, values
   end,
   
   write = function(device, object, value)
-    local res, sock, err  = device.profile._connect(device.mac)
-
+    local res, sock, err  = device.profile._connect(device)
+    
     local res2 = true 
     if res and sock then
       if (object.id == 'power') then
@@ -102,25 +101,25 @@ return {
         res2, err = ble.sockwritecmd(sock, 0x21, 0x55, 0x13, red, green, blue, 0x0D, 0x0A)
 
       elseif (object.id == 'white') then
+        value =  math.floor(value / 10 +0.5)
         ble.sockwritecmd(sock, 0x21, 0x55, 0x14, 0xFF, 0xFF, 0xFF, 0x0D, 0x0A)
         res2, err = ble.sockwritecmd(sock, 0x21, 0x55, 0x11, (value)+1, 0x0D, 0x0A)
 
       elseif (object.id == 'brightness') then
+        value =  math.floor(value / 10 +0.5)
         res2, err = ble.sockwritecmd(sock, 0x21, 0x55, 0x12, (value)+1, 0x0D, 0x0A)
-      
       end 
     end 
 
     if res2<=0 then 
-      device.profile._disconnect(device.mac) 
+      device.profile._disconnect(device) 
     end 
   end,
 
-  _connect = function(address) 
+  _connect = function(device) 
     local res, err = true, nil 
     
-    local socks = storage.get("blesocks") or {} 
-    local sock = type(socks)=="table" and socks[address] 
+    local sock = device.sock 
     
     if not sock or not ble.check(sock) then 
       if sock then 
@@ -130,7 +129,7 @@ return {
       sock = ble.sock() 
       ble.settimeout(sock, 30) 
       local i = 1 
-      res, err = 1, ble.connect(sock, address) 
+      res, err = 1, ble.connect(sock, device.mac) 
       while not res and i<10 do  --не всегда коннектится с первой попытки 
         os.sleep(0.5) 
         res, err = ble.connect(sock, device.mac)
@@ -141,21 +140,18 @@ return {
         ble.close(sock) 
         sock = nil 
       end 
-      
-      socks[address] = sock 
-      storage.set("blesocks", socks) 
+        
+      device.sock = sock 
     end 
     
     return res, sock, err 
   end,
 
-  _disconnect = function(address) 
-    local socks = storage.get("blesocks") or {} 
-    local sock = type(socks)=="table" and socks[address] 
+  _disconnect = function(device) 
+    local sock = device.sock 
     if sock then 
       ble.close(sock)   
     end 
-    socks[address] = nil 
-    storage.set("blesocks", socks) 
+    device.sock = nil 
   end 
 }
